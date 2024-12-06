@@ -32,8 +32,8 @@ int main() {
     monoC->setBoardSocket(dai::CameraBoardSocket::CAM_C);
     monoD->setBoardSocket(dai::CameraBoardSocket::CAM_D);
 
-    monoA->initialControl.setFrameSyncMode(dai::CameraControl::FrameSyncMode::OUTPUT);
-    monoB->initialControl.setFrameSyncMode(dai::CameraControl::FrameSyncMode::INPUT);
+    monoA->initialControl.setFrameSyncMode(dai::CameraControl::FrameSyncMode::INPUT);
+    monoB->initialControl.setFrameSyncMode(dai::CameraControl::FrameSyncMode::OUTPUT);
     monoC->initialControl.setFrameSyncMode(dai::CameraControl::FrameSyncMode::INPUT);
     monoD->initialControl.setFrameSyncMode(dai::CameraControl::FrameSyncMode::INPUT);
 
@@ -59,45 +59,24 @@ int main() {
     controlIn->out.link(monoC->inputControl);
     controlIn->out.link(monoD->inputControl);
 
-    // Sync together all 4 cameras that are connected to the OAK-FFC-4P:
-    // Create an instance of BoardConfig
-    dai::BoardConfig boardConfig;
-
-    // Create a gpio map to store GPIO configurations
-    std::unordered_map<int8_t, dai::BoardConfig::GPIO> gpio;
-
-    // Configure GPIO[6] to be OUTPUT and set it to HIGH
-    gpio[6] = dai::BoardConfig::GPIO(dai::BoardConfig::GPIO::OUTPUT, dai::BoardConfig::GPIO::HIGH);
-
-    // Assign GPIO configurations to the boardConfig
-    boardConfig.gpio = gpio;
-    pipeline.setBoardConfig(boardConfig);
-
     // Connect to device and start pipeline
     dai::Device device(pipeline);
+
+    // Sync together all 4 cameras that are connected to the OAK-FFC-4P:
+    // Create an instance of DeviceConfig
+    dai::Device::Config c = pipeline.getDeviceConfig();
+    // Configure GPIO[6] to be OUTPUT and set it to HIGH
+    c.board.gpio[6] = dai::BoardConfig::GPIO(dai::BoardConfig::GPIO::Direction::OUTPUT, dai::BoardConfig::GPIO::Level::HIGH);
 
     // Initialize control queues
     auto controlQueue = device.getInputQueue(controlIn->getStreamName());
 
-    // Output queues will be used to get the grayscale frames
+    // Output queues will be used to get the frames
     auto qA = device.getOutputQueue(xoutA->getStreamName(), 1, false);
     auto qB = device.getOutputQueue(xoutB->getStreamName(), 1, false);
     auto qC = device.getOutputQueue(xoutC->getStreamName(), 1, false);
     auto qD = device.getOutputQueue(xoutD->getStreamName(), 1, false);
 
-    int frameCount = 0;
-    double fps = 0.0;
-    auto start = std::chrono::high_resolution_clock::now();
-
-
-    // Defaults and limits for manual focus/exposure controls
-    int exp_time = 20000;
-    int exp_min = 1;
-    int exp_max = 33000;
-
-    int sens_iso = 100;
-    int sens_min = 100;
-    int sens_max = 1600;
     dai::CameraControl init_ctrl;
     init_ctrl.setAntiBandingMode(dai::CameraControl::AntiBandingMode::AUTO);
     controlQueue->send(init_ctrl);
@@ -118,36 +97,17 @@ int main() {
         cv::hconcat(stitched_frame, frame3, stitched_frame);
         cv::hconcat(stitched_frame, frame4, stitched_frame);
 
-        cv::imshow("Stitched Frame", stitched_frame);
-
-        frameCount++;
-        auto end = std::chrono::high_resolution_clock::now();
-        double elapsedSeconds = std::chrono::duration<double>(end - start).count();
-        if (elapsedSeconds >= 1.0) {
-            fps = frameCount / elapsedSeconds;
-            frameCount = 0;
-            start = end;
-        }
-        
-        int key = cv::waitKey(1);
-        if(key == 'e') {
-            printf("Autoexposure enable\n");
+        if(false) {
+            printf("Auto Exposure enabled\n");
             dai::CameraControl ctrl;
             ctrl.setAutoExposureEnable();
             controlQueue->send(ctrl);
-        } else if(key == 'i' || key == 'o' || key == 'k' || key == 'l') {
-            if(key == 'i') exp_time -= 500;
-            if(key == 'o') exp_time += 500;
-            if(key == 'k') sens_iso -= 100;
-            if(key == 'l') sens_iso += 100;
-            exp_time = clamp(exp_time, exp_min, exp_max);
-            sens_iso = clamp(sens_iso, sens_min, sens_max);
+        } else if(false) {
+            int exp_time, sens_iso;
             printf("Setting manual exposure, time: %d, iso: %d\n", exp_time, sens_iso);
             dai::CameraControl ctrl;
             ctrl.setManualExposure(exp_time, sens_iso);
             controlQueue->send(ctrl);
-        } else if(key == 'q' || key == 'Q') {
-            return 0;
         }
     }
 }
